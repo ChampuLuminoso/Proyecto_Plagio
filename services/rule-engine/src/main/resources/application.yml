@@ -1,0 +1,22 @@
+server:
+  port: 8083
+spring:
+  application:
+    name: rule-engine
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:mysql://localhost:3306/fraudguard}
+    username: ${SPRING_DATASOURCE_USERNAME:frauduser}
+    password: ${SPRING_DATASOURCE_PASSWORD:fraud1234}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    show-sql: false
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: always

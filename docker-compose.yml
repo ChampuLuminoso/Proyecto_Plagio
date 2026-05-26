@@ -1,0 +1,193 @@
+version: "3.9"
+
+networks:
+  fraudguard-net:
+    driver: bridge
+
+volumes:
+  mysql-data:
+  rabbitmq-data:
+
+services:
+
+  # ── INFRAESTRUCTURA ──────────────────────────────────────────
+
+  mysql:
+    image: mysql:8.0
+    container_name: fraudguard-mysql
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root1234}
+      MYSQL_DATABASE:      ${MYSQL_DATABASE:-fraudguard}
+      MYSQL_USER:          ${MYSQL_USER:-frauduser}
+      MYSQL_PASSWORD:      ${MYSQL_PASSWORD:-fraud1234}
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql-data:/var/lib/mysql
+      - ./mysql/init:/docker-entrypoint-initdb.d
+    networks:
+      - fraudguard-net
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${MYSQL_ROOT_PASSWORD:-root1234}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  rabbitmq:
+    image: rabbitmq:3.12-management
+    container_name: fraudguard-rabbitmq
+    restart: always
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-fraudguard}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASS:-rabbit1234}
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    volumes:
+      - rabbitmq-data:/var/lib/rabbitmq
+    networks:
+      - fraudguard-net
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── MICROSERVICIOS ───────────────────────────────────────────
+
+  transaction-ingestion:
+    build: ./services/transaction-ingestion
+    container_name: fraudguard-ingestion
+    restart: always
+    environment:
+      SPRING_DATASOURCE_URL:      jdbc:mysql://mysql:3306/${MYSQL_DATABASE:-fraudguard}
+      SPRING_DATASOURCE_USERNAME: ${MYSQL_USER:-frauduser}
+      SPRING_DATASOURCE_PASSWORD: ${MYSQL_PASSWORD:-fraud1234}
+      RABBITMQ_HOST:              rabbitmq
+      RABBITMQ_USER:              ${RABBITMQ_USER:-fraudguard}
+      RABBITMQ_PASS:              ${RABBITMQ_PASS:-rabbit1234}
+      JWT_SECRET:                 ${JWT_SECRET:-fraudguard_secret_key_2026}
+    ports:
+      - "8081:8081"
+    depends_on:
+      mysql:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    networks:
+      - fraudguard-net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8081/actuator/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  fraud-analysis:
+    build: ./services/fraud-analysis
+    container_name: fraudguard-analysis
+    restart: always
+    environment:
+      SPRING_DATASOURCE_URL:      jdbc:mysql://mysql:3306/${MYSQL_DATABASE:-fraudguard}
+      SPRING_DATASOURCE_USERNAME: ${MYSQL_USER:-frauduser}
+      SPRING_DATASOURCE_PASSWORD: ${MYSQL_PASSWORD:-fraud1234}
+      RABBITMQ_HOST:              rabbitmq
+      RABBITMQ_USER:              ${RABBITMQ_USER:-fraudguard}
+      RABBITMQ_PASS:              ${RABBITMQ_PASS:-rabbit1234}
+      RULE_ENGINE_URL:            http://rule-engine:8083
+    ports:
+      - "8082:8082"
+    depends_on:
+      mysql:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    networks:
+      - fraudguard-net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8082/actuator/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  rule-engine:
+    build: ./services/rule-engine
+    container_name: fraudguard-rules
+    restart: always
+    environment:
+      SPRING_DATASOURCE_URL:      jdbc:mysql://mysql:3306/${MYSQL_DATABASE:-fraudguard}
+      SPRING_DATASOURCE_USERNAME: ${MYSQL_USER:-frauduser}
+      SPRING_DATASOURCE_PASSWORD: ${MYSQL_PASSWORD:-fraud1234}
+    ports:
+      - "8083:8083"
+    depends_on:
+      mysql:
+        condition: service_healthy
+    networks:
+      - fraudguard-net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8083/actuator/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  notification-service:
+    build: ./services/notification-service
+    container_name: fraudguard-notifications
+    restart: always
+    environment:
+      SPRING_DATASOURCE_URL:      jdbc:mysql://mysql:3306/${MYSQL_DATABASE:-fraudguard}
+      SPRING_DATASOURCE_USERNAME: ${MYSQL_USER:-frauduser}
+      SPRING_DATASOURCE_PASSWORD: ${MYSQL_PASSWORD:-fraud1234}
+      RABBITMQ_HOST:              rabbitmq
+      RABBITMQ_USER:              ${RABBITMQ_USER:-fraudguard}
+      RABBITMQ_PASS:              ${RABBITMQ_PASS:-rabbit1234}
+    ports:
+      - "8084:8084"
+    depends_on:
+      mysql:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    networks:
+      - fraudguard-net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8084/actuator/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  alert-query-service:
+    build: ./services/alert-query-service
+    container_name: fraudguard-alerts
+    restart: always
+    environment:
+      SPRING_DATASOURCE_URL:      jdbc:mysql://mysql:3306/${MYSQL_DATABASE:-fraudguard}
+      SPRING_DATASOURCE_USERNAME: ${MYSQL_USER:-frauduser}
+      SPRING_DATASOURCE_PASSWORD: ${MYSQL_PASSWORD:-fraud1234}
+      JWT_SECRET:                 ${JWT_SECRET:-fraudguard_secret_key_2026}
+    ports:
+      - "8085:8085"
+    depends_on:
+      mysql:
+        condition: service_healthy
+    networks:
+      - fraudguard-net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8085/actuator/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── FRONTEND ─────────────────────────────────────────────────
+
+  frontend:
+    build: ./frontend
+    container_name: fraudguard-frontend
+    restart: always
+    ports:
+      - "3000:80"
+    depends_on:
+      - alert-query-service
+    networks:
+      - fraudguard-net

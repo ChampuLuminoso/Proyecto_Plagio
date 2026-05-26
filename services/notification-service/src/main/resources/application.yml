@@ -1,0 +1,30 @@
+server:
+  port: 8084
+spring:
+  application:
+    name: notification-service
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:mysql://localhost:3306/fraudguard}
+    username: ${SPRING_DATASOURCE_USERNAME:frauduser}
+    password: ${SPRING_DATASOURCE_PASSWORD:fraud1234}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    show-sql: false
+  rabbitmq:
+    host: ${RABBITMQ_HOST:localhost}
+    port: 5672
+    username: ${RABBITMQ_USER:fraudguard}
+    password: ${RABBITMQ_PASS:rabbit1234}
+fraudguard:
+  queues:
+    alerts: alerts.queue
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: always

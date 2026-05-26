@@ -1,0 +1,41 @@
+server:
+  port: 8081
+
+spring:
+  application:
+    name: transaction-ingestion
+
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:mysql://localhost:3306/fraudguard}
+    username: ${SPRING_DATASOURCE_USERNAME:frauduser}
+    password: ${SPRING_DATASOURCE_PASSWORD:fraud1234}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    show-sql: false
+
+  rabbitmq:
+    host: ${RABBITMQ_HOST:localhost}
+    port: 5672
+    username: ${RABBITMQ_USER:fraudguard}
+    password: ${RABBITMQ_PASS:rabbit1234}
+
+jwt:
+  secret: ${JWT_SECRET:fraudguard_secret_key_2026}
+  expiration: 86400000  # 24 horas en ms
+
+fraudguard:
+  queues:
+    transactions: transactions.queue
+    alerts:       alerts.queue
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+  endpoint:
+    health:
+      show-details: always
